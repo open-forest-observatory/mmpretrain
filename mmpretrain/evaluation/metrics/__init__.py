@@ -12,11 +12,12 @@ from .single_label import Accuracy, ConfusionMatrix, SingleLabelMetric
 from .visual_grounding_eval import VisualGroundingMetric
 from .voc_multi_label import VOCAveragePrecision, VOCMultiLabelMetric
 from .vqa import ReportVQA, VQAAcc
+from .tree_metric import TreeLevelAccuracy
 
 __all__ = [
     'Accuracy', 'SingleLabelMetric', 'MultiLabelMetric', 'AveragePrecision',
     'MultiTasksMetric', 'VOCAveragePrecision', 'VOCMultiLabelMetric',
     'ConfusionMatrix', 'RetrievalRecall', 'VQAAcc', 'ReportVQA', 'COCOCaption',
     'VisualGroundingMetric', 'ScienceQAMetric', 'GQAAcc', 'NocapsSave',
-    'RetrievalAveragePrecision', 'ShapeBiasMetric', 'ANLS'
+    'RetrievalAveragePrecision', 'ShapeBiasMetric', 'ANLS', 'TreeLevelAccuracy'
 ]

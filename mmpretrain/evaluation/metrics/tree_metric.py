@@ -1,6 +1,7 @@
 from mmengine.evaluator import BaseMetric
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 
 from mmpretrain.registry import METRICS
 
@@ -39,7 +40,15 @@ class TreeLevelAccuracy(BaseMetric):
         self.results = []
 
     def process(self, data_batch, data_samples):
-        """Collect per-image predictions."""
+        """Process one batch of data samples.
+
+        The processed results should be stored in ``self.results``, which will
+        be used to compute the metrics when all batches have been processed.
+
+        Args:
+            data_batch: A batch of data from the dataloader. Currently unused.
+            data_samples (Sequence[dict]): A batch of outputs from the model.
+        """
         for sample in data_samples:
             img_path = sample['img_path']
             img_id = img_path.split('/')[-1].split('.')[0]  # filename without extension
@@ -64,19 +73,18 @@ class TreeLevelAccuracy(BaseMetric):
         """
 
         # For every tree (key) append predictions from all of its images to a single list (value)
-        tree_preds = {}
+        tree_preds = defaultdict(list)
         for r in results:
             tid = r['tree_id']
-            if tid not in tree_preds:
-                tree_preds[tid] = []
             tree_preds[tid].append(r['pred'])
 
-        # Compute tree-level accuracy
         correct = 0
         total = 0
+        # Combine per-image predictions into a single tree-level prediction
+        # by averaging their softmax outputs (each image contributes equally).
+        # The final tree label is the class with the highest mean confidence.
+        # TODO: Experiment with confidence-weighted averaging
         for tid, preds in tree_preds.items():
-            # Aggregate predictions across all images of the same tree
-            # Take mean of predictions and assign label with highest mean score
             mean_pred = np.mean(preds, axis=0)
             pred_label = np.argmax(mean_pred)
             gt_label = self.tree2label[tid]  # ground-truth label

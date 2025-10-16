@@ -9,15 +9,17 @@ from mmpretrain.registry import METRICS
 class TreeLevelAccuracy(BaseMetric):
     """Tree-level accuracy metric by aggregating predictions across multiple views."""
 
-    def __init__(self, metadata_csv, classes, **kwargs):
+    def __init__(self, metadata_csv, level, classes, **kwargs):
         """
         Args:
             metadata_csv (str): Path to CSV containing metadata mapping images to trees
                 and their ground-truth species labels.
-                Must contain columns: ['image_id', 'tree_unique_id', 'species_final'].
+                Must contain columns: ['image_id', 'tree_unique_id', 'species_l1', 'species_l2', 'species_l3', 'species_l4'].
+            level (str): Species lumping level to use for evaluation ('l1', 'l2', 'l3', or 'l4').
             classes (list[str]): List of class names in the same order as dataset.
         """
         super().__init__(**kwargs)
+        self.level = level
         self.classes = classes
         # Create a mapping from class name -> integer index
         self.class_to_idx = {c: i for i, c in enumerate(classes)}
@@ -26,14 +28,17 @@ class TreeLevelAccuracy(BaseMetric):
         df = pd.read_csv(metadata_csv)
         df['image_id'] = df['image_id'].astype(str)
         df['tree_unique_id'] = df['tree_unique_id'].astype(str)
-        df['species_final'] = df['species_final'].astype(str)
+        
+        # Use the species column corresponding to the specified level
+        species_col = f'species_{level}'
+        df[species_col] = df[species_col].astype(str)
 
         # Map each image_id -> tree_unique_id (for grouping predictions later)
         self.img2tree = dict(zip(df['image_id'], df['tree_unique_id']))
 
         # Map each tree_unique_id -> ground-truth label index
         self.tree2label = {
-            row['tree_unique_id']: self.class_to_idx[row['species_final']]
+            row['tree_unique_id']: self.class_to_idx[row[species_col]]
             for _, row in df.iterrows()
         }
 
@@ -83,7 +88,6 @@ class TreeLevelAccuracy(BaseMetric):
         # Combine per-image predictions into a single tree-level prediction
         # by averaging their softmax outputs (each image contributes equally).
         # The final tree label is the class with the highest mean confidence.
-        # TODO: Experiment with confidence-weighted averaging
         for tid, preds in tree_preds.items():
             mean_pred = np.mean(preds, axis=0)
             pred_label = np.argmax(mean_pred)
@@ -94,4 +98,3 @@ class TreeLevelAccuracy(BaseMetric):
             total += 1
 
         return {'tree_acc': correct / total}
-

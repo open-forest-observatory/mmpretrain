@@ -88,7 +88,6 @@ class TreeLevelAccuracy(BaseMetric):
         # Combine per-image predictions into a single tree-level prediction
         # by averaging their softmax outputs (each image contributes equally).
         # The final tree label is the class with the highest mean confidence.
-        # TODO: Experiment with confidence-weighted averaging
         for tid, preds in tree_preds.items():
             mean_pred = np.mean(preds, axis=0)
             pred_label = np.argmax(mean_pred)

@@ -74,7 +74,7 @@ class TreeLevelAccuracy(BaseMetric):
             results (list[dict]): The processed results of each batch.
 
         Returns:
-            dict: Dictionary with tree-level accuracy as {'tree_acc': float}.
+            dict: Dictionary with tree-level accuracy values.
         """
 
         # For every tree (key) append predictions from all of its images to a single list (value)
@@ -83,18 +83,72 @@ class TreeLevelAccuracy(BaseMetric):
             tid = r['tree_id']
             tree_preds[tid].append(r['pred'])
 
-        correct = 0
+        # Variables to track micro accuracy
+        mean_correct = 0
+        vote_correct = 0
         total = 0
-        # Combine per-image predictions into a single tree-level prediction
-        # by averaging their softmax outputs (each image contributes equally).
-        # The final tree label is the class with the highest mean confidence.
-        for tid, preds in tree_preds.items():
-            mean_pred = np.mean(preds, axis=0)
-            pred_label = np.argmax(mean_pred)
-            gt_label = self.tree2label[tid]  # ground-truth label
 
-            if pred_label == gt_label:
-                correct += 1
+        # Track macro (per-class) accuracy
+        num_classes = len(self.classes)
+        mean_correct_per_class = np.zeros(num_classes, dtype=int)
+        mean_total_per_class = np.zeros(num_classes, dtype=int)
+
+        vote_correct_per_class = np.zeros(num_classes, dtype=int)
+        vote_total_per_class = np.zeros(num_classes, dtype=int)
+
+        # Compute predictions per tree
+        for tid, preds in tree_preds.items():
+            preds = np.array(preds)
+            gt = self.tree2label[tid]
+
+            # 1. Mean-probability aggregation
+            # Average predicted probabilities across all images and then select the class with highest mean probability
+            mean_pred = preds.mean(axis=0)
+            mean_label = np.argmax(mean_pred)
+
+            # micro
+            if mean_label == gt:
+                mean_correct += 1
             total += 1
 
-        return {'tree_acc': correct / total}
+            # macro
+            mean_total_per_class[gt] += 1
+            if mean_label == gt:
+                mean_correct_per_class[gt] += 1
+
+            # 2. Majority voting aggregation
+            # Compute predicted label for each image and then find the most common label
+            per_img_labels = np.argmax(preds, axis=1)
+            # NOTE: If two classes have the same count (tie-breaking) argmax() picks the lowest index
+            vote_label = np.bincount(per_img_labels).argmax()
+
+            # micro
+            if vote_label == gt:
+                vote_correct += 1
+
+            # macro
+            vote_total_per_class[gt] += 1
+            if vote_label == gt:
+                vote_correct_per_class[gt] += 1
+
+        # Compute macro accuracies by averaging per-class accuracies
+        # NOTE: Is ok to exclude classes with zero samples from the macro metric calculation?
+        mean_macro = np.mean([
+            mean_correct_per_class[c] / mean_total_per_class[c]
+            for c in range(num_classes) if mean_total_per_class[c] > 0
+        ])
+
+        vote_macro = np.mean([
+            vote_correct_per_class[c] / vote_total_per_class[c]
+            for c in range(num_classes) if vote_total_per_class[c] > 0
+        ])
+
+        return {
+            # Micro
+            "tree_acc_mean_micro": mean_correct / total,
+            "tree_acc_vote_micro": vote_correct / total,
+
+            # Macro (per-class)
+            "tree_acc_mean_macro": mean_macro,
+            "tree_acc_vote_macro": vote_macro,
+        }

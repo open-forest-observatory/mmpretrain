@@ -2,6 +2,7 @@ from mmengine.evaluator import BaseMetric
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+import warnings
 
 from mmpretrain.registry import METRICS
 
@@ -106,15 +107,11 @@ class TreeLevelAccuracy(BaseMetric):
             mean_pred = preds.mean(axis=0)
             mean_label = np.argmax(mean_pred)
 
-            # micro
-            if mean_label == gt:
-                mean_correct += 1
             total += 1
-
-            # macro
             mean_total_per_class[gt] += 1
             if mean_label == gt:
-                mean_correct_per_class[gt] += 1
+                mean_correct += 1  # micro
+                mean_correct_per_class[gt] += 1  # macro
 
             # 2. Majority voting aggregation
             # Compute predicted label for each image and then find the most common label
@@ -131,8 +128,16 @@ class TreeLevelAccuracy(BaseMetric):
             if vote_label == gt:
                 vote_correct_per_class[gt] += 1
 
+        # Identify classes with zero samples for macro-metric calculation
+        excluded_classes = [self.classes[c] for c in range(num_classes)
+                         if mean_total_per_class[c] == 0]
+        if excluded_classes:
+            warnings.warn(
+                f"Excluded {len(excluded_classes)} classes from macro acc due to zero samples: {excluded_classes}",
+                UserWarning,
+            )
+
         # Compute macro accuracies by averaging per-class accuracies
-        # NOTE: Is ok to exclude classes with zero samples from the macro metric calculation?
         mean_macro = np.mean([
             mean_correct_per_class[c] / mean_total_per_class[c]
             for c in range(num_classes) if mean_total_per_class[c] > 0

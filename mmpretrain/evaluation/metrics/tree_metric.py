@@ -2,6 +2,7 @@ from mmengine.evaluator import BaseMetric
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+import warnings
 
 from mmpretrain.registry import METRICS
 
@@ -74,7 +75,7 @@ class TreeLevelAccuracy(BaseMetric):
             results (list[dict]): The processed results of each batch.
 
         Returns:
-            dict: Dictionary with tree-level accuracy as {'tree_acc': float}.
+            dict: Dictionary with tree-level accuracy values.
         """
 
         # For every tree (key) append predictions from all of its images to a single list (value)
@@ -83,18 +84,78 @@ class TreeLevelAccuracy(BaseMetric):
             tid = r['tree_id']
             tree_preds[tid].append(r['pred'])
 
-        correct = 0
+        # Variables to track micro accuracy
+        mean_correct = 0
+        vote_correct = 0
         total = 0
-        # Combine per-image predictions into a single tree-level prediction
-        # by averaging their softmax outputs (each image contributes equally).
-        # The final tree label is the class with the highest mean confidence.
+
+        # Track macro (per-class) accuracy
+        num_classes = len(self.classes)
+        mean_correct_per_class = np.zeros(num_classes, dtype=int)
+        mean_total_per_class = np.zeros(num_classes, dtype=int)
+
+        vote_correct_per_class = np.zeros(num_classes, dtype=int)
+        vote_total_per_class = np.zeros(num_classes, dtype=int)
+
+        # Compute predictions per tree
         for tid, preds in tree_preds.items():
-            mean_pred = np.mean(preds, axis=0)
-            pred_label = np.argmax(mean_pred)
-            gt_label = self.tree2label[tid]  # ground-truth label
+            preds = np.array(preds)
+            gt = self.tree2label[tid]
 
-            if pred_label == gt_label:
-                correct += 1
+            # 1. Mean-probability aggregation
+            # Average predicted probabilities across all images and then select the class with highest mean probability
+            mean_pred = preds.mean(axis=0)
+            mean_label = np.argmax(mean_pred)
+
             total += 1
+            mean_total_per_class[gt] += 1
+            if mean_label == gt:
+                mean_correct += 1  # micro
+                mean_correct_per_class[gt] += 1  # macro
 
-        return {'tree_acc': correct / total}
+            # 2. Majority voting aggregation
+            # Compute predicted label for each image and then find the most common label
+            per_img_labels = np.argmax(preds, axis=1)
+            counts = np.bincount(per_img_labels)
+            # Add tiny random noise for fair tie-breaking since np.argmax will always take the first index
+            counts = counts + np.random.random(len(counts)) * 0.5
+            vote_label = counts.argmax()
+
+            # micro
+            if vote_label == gt:
+                vote_correct += 1
+
+            # macro
+            vote_total_per_class[gt] += 1
+            if vote_label == gt:
+                vote_correct_per_class[gt] += 1
+
+        # Identify classes with zero samples for macro-metric calculation
+        excluded_classes = [self.classes[c] for c in range(num_classes)
+                         if mean_total_per_class[c] == 0]
+        if excluded_classes:
+            warnings.warn(
+                f"Excluded {len(excluded_classes)} classes from macro acc due to zero samples: {excluded_classes}",
+                UserWarning,
+            )
+
+        # Compute macro accuracies by averaging per-class accuracies
+        mean_macro = np.mean([
+            mean_correct_per_class[c] / mean_total_per_class[c]
+            for c in range(num_classes) if mean_total_per_class[c] > 0
+        ])
+
+        vote_macro = np.mean([
+            vote_correct_per_class[c] / vote_total_per_class[c]
+            for c in range(num_classes) if vote_total_per_class[c] > 0
+        ])
+
+        return {
+            # Micro
+            "tree_acc_mean_micro": mean_correct / total,
+            "tree_acc_vote_micro": vote_correct / total,
+
+            # Macro (per-class)
+            "tree_acc_mean_macro": mean_macro,
+            "tree_acc_vote_macro": vote_macro,
+        }

@@ -116,8 +116,10 @@ class TreeLevelAccuracy(BaseMetric):
             # 2. Majority voting aggregation
             # Compute predicted label for each image and then find the most common label
             per_img_labels = np.argmax(preds, axis=1)
-            # NOTE: If two classes have the same count (tie-breaking) argmax() picks the lowest index
-            vote_label = np.bincount(per_img_labels).argmax()
+            counts = np.bincount(per_img_labels)
+            # Add tiny random noise for fair tie-breaking since np.argmax will always take the first index
+            counts = counts + np.random.random(len(counts)) * 0.5
+            vote_label = counts.argmax()
 
             # micro
             if vote_label == gt:

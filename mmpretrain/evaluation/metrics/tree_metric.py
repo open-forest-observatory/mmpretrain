@@ -15,7 +15,8 @@ class TreeLevelAccuracy(BaseMetric):
         Args:
             metadata_csv (str): Path to CSV containing metadata mapping images to trees
                 and their ground-truth species labels.
-                Must contain columns: ['image_id', 'tree_unique_id', 'species_l1', 'species_l2', 'species_l3', 'species_l4'].
+                Must contain columns: ['image_id', 'tree_unique_id', 'dataset_name', 
+                'species_l1', 'species_l2', 'species_l3', 'species_l4'].
             level (str): Species lumping level to use for evaluation ('l1', 'l2', 'l3', or 'l4').
             classes (list[str]): List of class names in the same order as dataset.
         """
@@ -29,17 +30,24 @@ class TreeLevelAccuracy(BaseMetric):
         df = pd.read_csv(metadata_csv)
         df['image_id'] = df['image_id'].astype(str)
         df['tree_unique_id'] = df['tree_unique_id'].astype(str)
+        df['dataset_name'] = df['dataset_name'].astype(str)
+        
+        # Create a unique tree identifier by combining dataset_name and tree_unique_id
+        # Note: 'tree_unique_id' alone is unique only to its dataset. The validation metadata
+        # file includes trees from all datasets so there can be multiple trees with the same tree_unique_id
+         
+        df['global_tree_id'] = df['dataset_name'] + '_' + df['tree_unique_id']
         
         # Use the species column corresponding to the specified level
         species_col = f'species_{level}'
         df[species_col] = df[species_col].astype(str)
 
-        # Map each image_id -> tree_unique_id (for grouping predictions later)
-        self.img2tree = dict(zip(df['image_id'], df['tree_unique_id']))
+        # Map each image_id -> global_tree_id (for grouping predictions later)
+        self.img2tree = dict(zip(df['image_id'], df['global_tree_id']))
 
-        # Map each tree_unique_id -> ground-truth label index
+        # Map each global_tree_id -> ground-truth label index
         self.tree2label = {
-            row['tree_unique_id']: self.class_to_idx[row[species_col]]
+            row['global_tree_id']: self.class_to_idx[row[species_col]]
             for _, row in df.iterrows()
         }
 

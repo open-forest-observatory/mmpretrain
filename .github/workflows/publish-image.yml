@@ -2,10 +2,6 @@ name: Publish mmpretrain image to Github Packages
 
 on:
   push:
-    # Only build if the code or requirements change
-    paths:
-      - 'mmpretrain/**'
-      - 'requirements.txt'
 
 env:
   REGISTRY: ghcr.io

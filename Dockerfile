@@ -25,5 +25,8 @@ COPY . /app
 # Install the project with mim
 RUN conda run -n open-mmlab mim install -e .
 
+# Re-enforce that setup tools is less than version 60 for compatibility with tensorboard logger
+RUN conda run -n open-mmlab pip install 'setuptools<60'
+
 # Activate the conda environment by default for all subsequent commands
 ENV PATH="/opt/conda/envs/open-mmlab/bin:$PATH"

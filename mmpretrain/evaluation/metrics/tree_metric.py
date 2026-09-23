@@ -16,6 +16,10 @@ class TreeLevelAccuracy(BaseMetric):
             metadata_csv (str): Path to CSV containing metadata mapping images to trees
                 and their ground-truth species labels.
                 Must contain columns: ['image_path', 'class', 'tree_id', 'dataset_id'].
+                - `image_path`: the absolute path to the image
+                - `tree_id`: the string representation of the tree's unique ID within a dataset
+                - `dataset_id`: the string representation of which dataset is being used
+                - `class`: the groundtruth class of the tree. Note this is assumed to be the same across all rows which have the same `tree_id`-`dataset_id` pairing, but this is not checked.
             classes (list[str]): List of class names in the same order as dataset.
         """
         super().__init__(**kwargs)
@@ -33,7 +37,6 @@ class TreeLevelAccuracy(BaseMetric):
         # Create a unique tree identifier by combining dataset_id and tree_id
         # Note: 'tree_id' alone is unique only to its dataset. The validation metadata
         # file includes trees from all datasets so there can be multiple trees with the same tree_id
-
         df['global_tree_id'] = df['dataset_id'] + '_' + df['tree_id']
 
         # Map each image_id -> global_tree_id (for grouping predictions later)

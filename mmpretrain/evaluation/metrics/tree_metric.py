@@ -19,7 +19,7 @@ class TreeLevelAccuracy(BaseMetric):
                 - `image_path`: the absolute path to the image
                 - `tree_id`: the string representation of the tree's unique ID within a dataset
                 - `dataset_id`: the string representation of which dataset is being used
-                - `class`: the groundtruth class of the tree. Note this is assumed to be the same across all rows which have the same `tree_id`-`dataset_id` pairing, but this is not checked.
+                - `class`: the groundtruth class of the tree. Note this validated to ensure it is the same across all rows which have the same `tree_id`-`dataset_id` pairing.
             classes (list[str]): List of class names in the same order as dataset.
         """
         super().__init__(**kwargs)
@@ -39,7 +39,19 @@ class TreeLevelAccuracy(BaseMetric):
         # file includes trees from all datasets so there can be multiple trees with the same tree_id
         df['global_tree_id'] = df['dataset_id'] + '_' + df['tree_id']
 
-        # Map each image_id -> global_tree_id (for grouping predictions later)
+        # Verify that every row sharing a global_tree_id agrees on the class,
+        # since tree2label below only keeps one class per global_tree_id.
+        classes_per_tree = df.groupby(['dataset_id', 'tree_id'])['class'].nunique()
+        inconsistent_trees = classes_per_tree[classes_per_tree > 1]
+        if len(inconsistent_trees) > 0:
+            offending = [
+                f'dataset_id={d}, tree_id={t}' for d, t in inconsistent_trees.index
+            ]
+            raise ValueError(
+                'Found trees with inconsistent class labels across rows: '
+                f'{offending}')
+
+        # Map each image_path -> global_tree_id (for grouping predictions later)
         self.img2tree = dict(zip(df['image_path'], df['global_tree_id']))
 
         # Map each global_tree_id -> ground-truth label index

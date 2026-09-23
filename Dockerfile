@@ -15,7 +15,7 @@ ENV PATH="/opt/conda/bin:$PATH"
 RUN conda create -n open-mmlab python=3.8 pytorch==1.10.1 torchvision==0.11.2 cudatoolkit=11.3 -c pytorch -y
 
 # Install openmim and mmpretrain dependencies into the conda environment
-RUN conda run -n open-mmlab pip install 'setuptools<60' openmim tensorboard
+RUN conda run -n open-mmlab pip install 'setuptools<59' openmim tensorboard
 
 # Set the container workdir
 WORKDIR /app
@@ -25,8 +25,8 @@ COPY . /app
 # Install the project with mim
 RUN conda run -n open-mmlab mim install -e .
 
-# Re-enforce that setup tools is less than version 60 for compatibility with tensorboard logger
-RUN conda run -n open-mmlab pip install 'setuptools<60'
+# Re-enforce that setup tools is less than version 59 for compatibility with tensorboard logger
+RUN conda run -n open-mmlab pip install 'setuptools<59'
 
 # Activate the conda environment by default for all subsequent commands
 ENV PATH="/opt/conda/envs/open-mmlab/bin:$PATH"

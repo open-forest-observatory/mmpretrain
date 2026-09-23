@@ -10,44 +10,55 @@ from mmpretrain.registry import METRICS
 class TreeLevelAccuracy(BaseMetric):
     """Tree-level accuracy metric by aggregating predictions across multiple views."""
 
-    def __init__(self, metadata_csv, level, classes, **kwargs):
+    def __init__(self, metadata_csv, classes, **kwargs):
         """
         Args:
             metadata_csv (str): Path to CSV containing metadata mapping images to trees
                 and their ground-truth species labels.
-                Must contain columns: ['image_id', 'tree_unique_id', 'dataset_name', 
-                'species_l1', 'species_l2', 'species_l3', 'species_l4'].
-            level (str): Species lumping level to use for evaluation ('l1', 'l2', 'l3', or 'l4').
+                Must contain columns: ['image_path', 'class', 'tree_id', 'dataset_id'].
+                - `image_path`: the absolute path to the image
+                - `tree_id`: the string representation of the tree's unique ID within a dataset
+                - `dataset_id`: the string representation of which dataset is being used
+                - `class`: the groundtruth class of the tree. Note this validated to ensure it is the same across all rows which have the same `tree_id`-`dataset_id` pairing.
             classes (list[str]): List of class names in the same order as dataset.
         """
         super().__init__(**kwargs)
-        self.level = level
         self.classes = classes
         # Create a mapping from class name -> integer index
         self.class_to_idx = {c: i for i, c in enumerate(classes)}
 
         # Load metadata
         df = pd.read_csv(metadata_csv)
-        df['image_id'] = df['image_id'].astype(str)
-        df['tree_unique_id'] = df['tree_unique_id'].astype(str)
-        df['dataset_name'] = df['dataset_name'].astype(str)
-        
-        # Create a unique tree identifier by combining dataset_name and tree_unique_id
-        # Note: 'tree_unique_id' alone is unique only to its dataset. The validation metadata
-        # file includes trees from all datasets so there can be multiple trees with the same tree_unique_id
-         
-        df['global_tree_id'] = df['dataset_name'] + '_' + df['tree_unique_id']
-        
-        # Use the species column corresponding to the specified level
-        species_col = f'species_{level}'
-        df[species_col] = df[species_col].astype(str)
+        df['class'] = df['class'].astype(str)
+        df['tree_id'] = df['tree_id'].astype(str)
+        df['dataset_id'] = df['dataset_id'].astype(str)
+        df['image_path'] = df['image_path'].astype(str)
 
-        # Map each image_id -> global_tree_id (for grouping predictions later)
-        self.img2tree = dict(zip(df['image_id'], df['global_tree_id']))
+        # Create a unique tree identifier by combining dataset_id and tree_id
+        # Note: 'tree_id' alone is unique only to its dataset. The validation metadata
+        # file includes trees from all datasets so there can be multiple trees with the same tree_id
+        df['global_tree_id'] = df['dataset_id'] + '_' + df['tree_id']
+
+        # Verify that every row sharing a global_tree_id agrees on the class,
+        # since tree2label below only keeps one class per global_tree_id.
+        classes_per_tree = df.groupby(['dataset_id', 'tree_id'])['class'].nunique()
+        inconsistent_trees = classes_per_tree[classes_per_tree > 1]
+        if len(inconsistent_trees) > 0:
+            offending = [
+                f'dataset_id={d}, tree_id={t}' for d, t in inconsistent_trees.index
+            ]
+            raise ValueError(
+                'Found trees with inconsistent class labels across rows: '
+                f'{offending}')
+
+        # Map each image_path -> global_tree_id (for grouping predictions later)
+        self.img2tree = dict(zip(df['image_path'], df['global_tree_id']))
 
         # Map each global_tree_id -> ground-truth label index
+        # Note that this will only take the information from the last row in each global_tree_id
+        # but this is ok because all the chips from a given global_id should have the same class.
         self.tree2label = {
-            row['global_tree_id']: self.class_to_idx[row[species_col]]
+            row['global_tree_id']: self.class_to_idx[row["class"]]
             for _, row in df.iterrows()
         }
 
@@ -65,20 +76,19 @@ class TreeLevelAccuracy(BaseMetric):
         """
         for sample in data_samples:
             img_path = sample['img_path']
-            img_id = img_path.split('/')[-1].split('.')[0]  # filename without extension
             # Convert prediction tensor to numpy array
             pred = sample['pred_score'].cpu().numpy()
 
             # Append prediction record with tree association
             self.results.append({
-                'img_id': img_id,
-                'tree_id': self.img2tree[img_id],
+                'img_path': img_path,
+                'tree_id': self.img2tree[img_path],
                 'pred': pred
             })
 
     def compute_metrics(self, results):
         """Aggregate predictions per tree and compute accuracy.
-        
+
         Args:
             results (list[dict]): The processed results of each batch.
 

@@ -6,7 +6,9 @@ from mmpretrain.apis import ImageClassificationInferencer
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(help="Generate one classification prediction per image in a folder")
+    parser = argparse.ArgumentParser(
+        description="Generate one classification prediction per image in a folder"
+    )
     parser.add_argument("input_folder", type=Path, help="Path to chips to classify")
     parser.add_argument(
         "config_path", type=Path, help="Path to .py config file to use for prediction"

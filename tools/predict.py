@@ -36,8 +36,9 @@ def main(input_folder: Path, config_path: Path, model_path: Path, output_path: P
     print(f"Running on {len(input_files)} files")
 
     # Setting up the model
+    # Note: these inputs must be strings, not Paths, or this will fail
     inferencer = ImageClassificationInferencer(
-        model=config_path, pretrained=model_path, device="cuda"
+        model=str(config_path), pretrained=str(model_path), device="cuda"
     )
 
     # Run inference. This is the slow step.

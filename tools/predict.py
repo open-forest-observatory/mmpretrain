@@ -2,6 +2,7 @@ import json
 import argparse
 from pathlib import Path
 
+import torch
 from mmpretrain.apis import ImageClassificationInferencer
 
 
@@ -36,9 +37,11 @@ def main(input_folder: Path, config_path: Path, model_path: Path, output_path: P
     print(f"Running on {len(input_files)} files")
 
     # Setting up the model
+    # Select the appropriate device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     # Note: these inputs must be strings, not Paths, or this will fail
     inferencer = ImageClassificationInferencer(
-        model=str(config_path), pretrained=str(model_path)
+        model=str(config_path), pretrained=str(model_path), device=device
     )
 
     # Run inference. This is the slow step.

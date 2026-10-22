@@ -38,7 +38,7 @@ def main(input_folder: Path, config_path: Path, model_path: Path, output_path: P
     # Setting up the model
     # Note: these inputs must be strings, not Paths, or this will fail
     inferencer = ImageClassificationInferencer(
-        model=str(config_path), pretrained=str(model_path), device="cuda"
+        model=str(config_path), pretrained=str(model_path)
     )
 
     # Run inference. This is the slow step.
